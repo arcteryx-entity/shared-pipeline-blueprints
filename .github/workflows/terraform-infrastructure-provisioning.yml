@@ -169,34 +169,31 @@ jobs:
           #        --minimum-failure-severity=${{ env.MINIMUM_FAILURE_SEVERITY }} \
           #        --no-color > ../tflint-${{ matrix.workspace }}.xml
 
-      - name: TFSec Security Scan
+      - name: Trivy IaC Security Scan
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
-          echo "Running tfsec..."
-          # tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
-          #      --workspace ${{ matrix.workspace }} \
-          #      --no-module-downloads \
-          #      --soft-fail \
-          #      --out=../tfsec-report-${{ matrix.workspace }}.json \
-          #      --format=json
+          echo "Running Trivy IaC security scan..."
+          # trivy config . \
+          #      --tf-vars ${{ env.TF_VARIABLE_FILE }} \
+          #      --format json \
+          #      --output ../trivy-iac-report-${{ matrix.workspace }}.json \
+          #      --severity MEDIUM,HIGH,CRITICAL
 
-      - name: TFSec Summary
+      - name: Trivy Summary
         if: always()
         run: |
-          echo "Tfsec Summary..."
-          # jq -c '.["results"]' tfsec-report-${{ matrix.workspace }}.json | \
-          #   jq -c '.[] | [.severity, .description, .location.filename]' | sort || true
-          # echo "Scanning for ${{ env.MINIMUM_SEVERITY }} severity..."
+          echo "Trivy IaC scan summary..."
+          # jq -c '.Results[] | select(.Misconfigurations) | .Misconfigurations[] | [.Severity, .Title, .ID]' \
+          #   trivy-iac-report-${{ matrix.workspace }}.json | sort || true
 
-      - name: TFSec Critical Check
+      - name: Trivy Critical Check
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
-          echo "Running TFSec critical check..."
-          # tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
-          #      --workspace=${{ matrix.workspace }} \
-          #      --no-module-downloads \
-          #      --concise-output \
-          #      --minimum-severity CRITICAL
+          echo "Running Trivy critical severity check..."
+          # trivy config . \
+          #      --tf-vars ${{ env.TF_VARIABLE_FILE }} \
+          #      --severity CRITICAL \
+          #      --exit-code 1
 
       # - name: Upload Validation Reports
       #   uses: actions/upload-artifact@v4.1.0
@@ -205,7 +202,7 @@ jobs:
       #     name: "validate-reports-${{ matrix.workspace }}"
       #     retention-days: 7
       #     path: |
-      #       tfsec-report-${{ matrix.workspace }}.json
+      #       trivy-iac-report-${{ matrix.workspace }}.json
       #       tflint-${{ matrix.workspace }}.xml
 
   Plan:
@@ -316,7 +313,7 @@ jobs:
       - name: Display Scan Stage
         run: |
           echo "=========================================="
-          echo "🔒 Running Scan Stage (OPA + Trivy)"
+          echo "🔒 Running Scan Stage (Trivy + OPA)"
           echo "Workspace: ${{ matrix.workspace }}"
           echo "Branch: ${{ github.ref_name }}"
           echo "=========================================="
