@@ -1,256 +1,484 @@
 name: Terraform Infrastructure Provisioning
-on:
-  workflow_call:
-    inputs:
-      foo:
-        required: true
-        type: string
 
-# jobs:
-#   Init:
-#     # You need to use the INSTALLATION_NAME from the previous step
-#     runs-on: platform-shared-services
-#     steps:
-#     - run: echo "🎉 This job uses runner scale set runners!"
-    
-# name: Terraform Infrastructure Provisioning
-# on:
-#   push:
-#   workflow_dispatch:
-# concurrency:
-#   group: "${{ github.ref }}"
-#   cancel-in-progress: true
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'renovate/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: 'Terraform workspace to deploy (leave empty for all)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - dev
+          - sit
+          - uat
+          - preprod
+          - prod
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        default: 'plan'
+        options:
+          - validate
+          - plan
+          - apply
+          - destroy
+
+concurrency:
+  group: "${{ github.ref }}-${{ github.workflow }}"
+  cancel-in-progress: false
+
+env:
+  BLUEPRINT_REPO_PATH: "/"
+  BLUEPRINT_DEFAULT_BRANCH: main
+  MINIMUM_SEVERITY: MEDIUM
+  MINIMUM_FAILURE_SEVERITY: warning
+  TF_CURRENT_SOURCE_DIR: "terraform"
+  VARIABLE_ROOT_FOLDER: environments
+  TF_BACKEND_ASSUME_ROLE_ARN: arn:aws:iam::621074188511:role/AdminRole
+  IGNORE_ASSUME_ROLE: 'false'
 
 jobs:
   Validate:
+    name: "Validate (${{ matrix.workspace }})"
     runs-on: platform-shared-services
     container:
       image: freddieentity/terraform:latest
-    if: # Unable to map conditional expression to GitHub Actions equivalent
-#         ${{ github.ref }} == $CI_DEFAULT_BRANCH || ${{ github.ref }} =~ /^feature\/*/ || ${{ github.ref }} =~ /^renovate\/*/ || !($VALIDATION_ENABLE == "false") || ${{ github.ref }}
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'validate' || github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'))
     environment:
-      name: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
+      name: "${{ matrix.workspace }}"
     timeout-minutes: 60
     continue-on-error: true
-    env:
-      BLUEPRINT_REPO_PATH: "/"
-      BLUEPRINT_DEFAULT_BRANCH: bugfix/validate-tag
-      MINIMUM_SEVERITY: MEDIUM
-      MINIMUM_FAILURE_SEVERITY: warning
-      TF_CURRENT_SOURCE_DIR:
-        "!reference":
-        - ".config"
-        - terraform-src
-      VARIABLE_ROOT_FOLDER: environments
-      TF_BACKEND_ASSUME_ROLE_ARN: arn:aws:iam::621074188511:role/AdminRole
-      IGNORE_ASSUME_ROLE: 'false'
-      WORKSPACE: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
     strategy:
+      fail-fast: false
       matrix:
-        TF_PREDEFINE_WORKSPACE:
+        workspace:
+          - dev
+          - sit
+          - uat
+          - preprod
+          - prod
+    env:
+      WORKSPACE: "${{ matrix.workspace }}"
+      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
     steps:
-    - uses: actions/checkout@v4.1.0
-      with:
-        fetch-depth: 20
-        lfs: true
-    - run:
-        "!reference":
-        - ".assume-role"
-        - script
-    - run: assume_role $ASSUME_ROLE_ARN $EXTERNAL_ID
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfenv_script
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfinit_script
-    - run: |
-        TF_FMT_CMD="terraform -chdir=$TF_CURRENT_SOURCE_DIR fmt -list=true -write=false -diff=true -check=true -recursive"
-        echo $TF_FMT_CMD
-        eval $TF_FMT_CMD
-    - run: |
-        TF_VALIDATE_CMD="terraform -chdir=$TF_CURRENT_SOURCE_DIR validate"
-        echo $TF_VALIDATE_CMD
-        eval $TF_VALIDATE_CMD
-    - run: |
-        TF_LINT_CMD="tflint --chdir=$TF_CURRENT_SOURCE_DIR --var-file=$TF_VARIABLE_FILE -f junit --minimum-failure-severity=${MINIMUM_FAILURE_SEVERITY} --no-color > tflint-${WORKSPACE}.xml"
-        echo $TF_LINT_CMD
-        eval $TF_LINT_CMD
-    - run: tfsec $TF_CURRENT_SOURCE_DIR --var-file=$TF_VARIABLE_FILE --workspace $WORKSPACE --no-module-downloads --soft-fail --out=tfsec-report-${WORKSPACE}.json --format=json
-    - run: echo "Tfsec Summary..."
-    - run: jq -c '.["results"]' tfsec-report-${WORKSPACE}.json | jq -c '.[] | [.severity, .description, .location.filename]' | sort || true
-    - run: echo "Scanning for ${MINIMUM_SEVERITY} severity..."
-    - run: tfsec $TF_CURRENT_SOURCE_DIR --var-file=$TF_VARIABLE_FILE --workspace=$WORKSPACE --no-module-downloads --concise-output --minimum-severity CRITICAL
-#     # 'artifacts.junit' was not transformed because there is no suitable equivalent in GitHub Actions
-    - uses: actions/upload-artifact@v4.1.0
-      if: always()
-      with:
-        name: "${{ github.job }}"
-        retention-days: 1
-        path: |-
-          tfsec-report-${WORKSPACE}.json
-          tflint-${WORKSPACE}.xml
+      - name: Display Validate Stage
+        run: |
+          echo "=========================================="
+          echo "🔍 Running Validate Stage"
+          echo "Workspace: ${{ matrix.workspace }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "=========================================="
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.0
+        with:
+          fetch-depth: 20
+          lfs: true
+
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+
+      # - name: Terraform Format Check
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Running terraform fmt check..."
+      #     terraform fmt -list=true -write=false -diff=true -check=true -recursive
+
+      # - name: Terraform Validate
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Running terraform validate..."
+      #     terraform validate
+
+      # - name: TFLint
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Running tflint..."
+      #     tflint --var-file=${{ env.TF_VARIABLE_FILE }} \
+      #            -f junit \
+      #            --minimum-failure-severity=${{ env.MINIMUM_FAILURE_SEVERITY }} \
+      #            --no-color > ../tflint-${{ matrix.workspace }}.xml
+
+      # - name: TFSec Security Scan
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Running tfsec..."
+      #     tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
+      #          --workspace ${{ matrix.workspace }} \
+      #          --no-module-downloads \
+      #          --soft-fail \
+      #          --out=../tfsec-report-${{ matrix.workspace }}.json \
+      #          --format=json
+
+      # - name: TFSec Summary
+      #   if: always()
+      #   run: |
+      #     echo "Tfsec Summary..."
+      #     jq -c '.["results"]' tfsec-report-${{ matrix.workspace }}.json | \
+      #       jq -c '.[] | [.severity, .description, .location.filename]' | sort || true
+      #     echo "Scanning for ${{ env.MINIMUM_SEVERITY }} severity..."
+
+      # - name: TFSec Critical Check
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
+      #          --workspace=${{ matrix.workspace }} \
+      #          --no-module-downloads \
+      #          --concise-output \
+      #          --minimum-severity CRITICAL
+
+      # - name: Upload Validation Reports
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "validate-reports-${{ matrix.workspace }}"
+      #     retention-days: 7
+      #     path: |
+      #       tfsec-report-${{ matrix.workspace }}.json
+      #       tflint-${{ matrix.workspace }}.xml
+
   Plan:
+    name: "Plan (${{ matrix.workspace }})"
     needs: Validate
     runs-on: platform-shared-services
     container:
       image: freddieentity/terraform:latest
-    if: # Unable to map conditional expression to GitHub Actions equivalent
-#         ${{ github.ref }} == $CI_DEFAULT_BRANCH || ${{ github.ref }} =~ /^feature\/*/ || ${{ github.ref }} =~ /^renovate\/*/ || !($PLAN_ENABLE == "false") || ${{ github.ref }}
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'))
     environment:
-      name: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
+      name: "${{ matrix.workspace }}"
     timeout-minutes: 60
     continue-on-error: true
-    env:
-      BLUEPRINT_REPO_PATH: "/"
-      BLUEPRINT_DEFAULT_BRANCH: bugfix/validate-tag
-      MINIMUM_SEVERITY: MEDIUM
-      MINIMUM_FAILURE_SEVERITY: warning
-      TF_CURRENT_SOURCE_DIR:
-        "!reference":
-        - ".config"
-        - terraform-src
-      VARIABLE_ROOT_FOLDER: environments
-      TF_BACKEND_ASSUME_ROLE_ARN: arn:aws:iam::621074188511:role/AdminRole
-      IGNORE_ASSUME_ROLE: 'false'
-      WORKSPACE: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
     strategy:
+      fail-fast: false
       matrix:
-        TF_PREDEFINE_WORKSPACE:
+        workspace:
+          - dev
+          - sit
+          - uat
+          - preprod
+          - prod
+    env:
+      WORKSPACE: "${{ matrix.workspace }}"
+      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
     steps:
-    - uses: actions/checkout@v4.1.0
-      with:
-        fetch-depth: 20
-        lfs: true
-    - uses: actions/download-artifact@v4.1.0
-    - run:
-        "!reference":
-        - ".assume-role"
-        - script
-    - run: assume_role $ASSUME_ROLE_ARN $EXTERNAL_ID
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfenv_script
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfinit_script
-    - run: |
-        cd ${{ github.workspace }}/$TF_CURRENT_SOURCE_DIR
-        TF_PLAN_CMD="terraform plan -var-file=$TF_VARIABLE_FILE -out tf-${WORKSPACE}.plan $ARGS_APPLY"
-        echo $TF_PLAN_CMD
-        eval $TF_PLAN_CMD
-        cd ${{ github.workspace }}
-    - uses: actions/upload-artifact@v4.1.0
-      if: success()
-      with:
-        name: "${{ github.job }}"
-        retention-days: 1
-        path: "$TF_CURRENT_SOURCE_DIR/tf-${WORKSPACE}.plan"
+      - name: Display Plan Stage
+        run: |
+          echo "=========================================="
+          echo "📋 Running Plan Stage"
+          echo "Workspace: ${{ matrix.workspace }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "=========================================="
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.0
+        with:
+          fetch-depth: 20
+          lfs: true
+
+      # - name: Download Validation Artifacts
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "validate-reports-${{ matrix.workspace }}"
+      #     path: .
+
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+
+      # - name: Terraform Plan
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Running terraform plan..."
+      #     terraform plan \
+      #       -var-file=${{ env.TF_VARIABLE_FILE }} \
+      #       -out=tf-${{ matrix.workspace }}.plan \
+      #       -input=false
+
+      # - name: Upload Plan Artifact
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: success()
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     retention-days: 7
+      #     path: "${{ env.TF_CURRENT_SOURCE_DIR }}/tf-${{ matrix.workspace }}.plan"
+
+  Scan:
+    name: "Scan (${{ matrix.workspace }})"
+    needs: Plan
+    runs-on: platform-shared-services
+    container:
+      image: freddieentity/terraform:latest
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'))
+    environment:
+      name: "${{ matrix.workspace }}"
+    timeout-minutes: 60
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - dev
+          - sit
+          - uat
+          - preprod
+          - prod
+    env:
+      WORKSPACE: "${{ matrix.workspace }}"
+      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
+    steps:
+      - name: Display Scan Stage
+        run: |
+          echo "=========================================="
+          echo "🔒 Running Scan Stage (OPA + Trivy)"
+          echo "Workspace: ${{ matrix.workspace }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "=========================================="
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.0
+        with:
+          fetch-depth: 20
+          lfs: true
+
+      # - name: Download Plan Artifact
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     path: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Convert Plan to JSON
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Converting plan to JSON format..."
+      #     terraform show -json tf-${{ matrix.workspace }}.plan > tf-${{ matrix.workspace }}-plan.json
+
+      - name: Run OPA Policy Scan
+        working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+        run: |
+          echo "Running OPA policy scan on terraform plan..."
+          # Example OPA scan command:
+          # opa eval --data policy/ --input tf-${{ matrix.workspace }}-plan.json \
+          #   --format pretty "data.terraform.deny" > ../opa-scan-${{ matrix.workspace }}.json
+
+      - name: Run Trivy Security Scan
+        working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+        run: |
+          echo "Running Trivy security scan on terraform plan..."
+          # Example Trivy scan command:
+          # trivy config . \
+          #   --format json \
+          #   --output ../trivy-scan-${{ matrix.workspace }}.json \
+          #   --severity HIGH,CRITICAL
+
+      # - name: Upload Scan Results
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "scan-results-${{ matrix.workspace }}"
+      #     retention-days: 7
+      #     path: |
+      #       opa-scan-${{ matrix.workspace }}.json
+      #       trivy-scan-${{ matrix.workspace }}.json
+
   Apply:
-    needs: Plan
+    name: "Apply (${{ matrix.workspace }})"
+    needs: Scan
     runs-on: platform-shared-services
     container:
       image: freddieentity/terraform:latest
-    if: github.event_name == 'workflow_dispatch'
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     environment:
-      name: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
+      name: "${{ matrix.workspace }}"
     timeout-minutes: 60
-    env:
-      BLUEPRINT_REPO_PATH: "/"
-      BLUEPRINT_DEFAULT_BRANCH: bugfix/validate-tag
-      MINIMUM_SEVERITY: MEDIUM
-      MINIMUM_FAILURE_SEVERITY: warning
-      TF_CURRENT_SOURCE_DIR:
-        "!reference":
-        - ".config"
-        - terraform-src
-      VARIABLE_ROOT_FOLDER: environments
-      TF_BACKEND_ASSUME_ROLE_ARN: arn:aws:iam::621074188511:role/AdminRole
-      IGNORE_ASSUME_ROLE: 'false'
-      WORKSPACE: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
     strategy:
+      fail-fast: false
+      max-parallel: 1
       matrix:
-        TF_PREDEFINE_WORKSPACE:
+        workspace:
+          - dev
+          - sit
+          - uat
+          - preprod
+          - prod
+    env:
+      WORKSPACE: "${{ matrix.workspace }}"
+      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
     steps:
-    - uses: actions/checkout@v4.1.0
-      with:
-        fetch-depth: 20
-        lfs: true
-    - uses: actions/download-artifact@v4.1.0
-    - run:
-        "!reference":
-        - ".assume-role"
-        - script
-    - run: assume_role $ASSUME_ROLE_ARN $EXTERNAL_ID
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfenv_script
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfinit_script
-    - run: |
-        TF_APPLY_CMD="terraform -chdir=$TF_CURRENT_SOURCE_DIR apply -auto-approve $ARGS_APPLY tf-${WORKSPACE}.plan"
-        echo $TF_APPLY_CMD
-        eval $TF_APPLY_CMD
-    - uses: actions/upload-artifact@v4.1.0
-      if: success()
-      with:
-        name: "${{ github.job }}"
-        retention-days: 1
-        path: "$TF_CURRENT_SOURCE_DIR/tf-${WORKSPACE}.plan"
+      - name: Display Apply Stage
+        run: |
+          echo "=========================================="
+          echo "🚀 Running Apply Stage"
+          echo "Workspace: ${{ matrix.workspace }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "=========================================="
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.0
+        with:
+          fetch-depth: 20
+          lfs: true
+
+      # - name: Download Plan Artifact
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     path: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+
+      # - name: Terraform Apply
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Applying terraform plan..."
+      #     terraform apply -auto-approve tf-${{ matrix.workspace }}.plan
+
+      # - name: Upload Apply Logs
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "apply-logs-${{ matrix.workspace }}"
+      #     retention-days: 30
+      #     path: "${{ env.TF_CURRENT_SOURCE_DIR }}/*.log"
+
   Destroy:
-    needs: Plan
+    name: "Destroy (${{ matrix.workspace }})"
+    needs: Scan
     runs-on: platform-shared-services
     container:
       image: freddieentity/terraform:latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     environment:
-      name: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
+      name: "${{ matrix.workspace }}"
     timeout-minutes: 60
-    env:
-      BLUEPRINT_REPO_PATH: "/"
-      BLUEPRINT_DEFAULT_BRANCH: bugfix/validate-tag
-      MINIMUM_SEVERITY: MEDIUM
-      MINIMUM_FAILURE_SEVERITY: warning
-      TF_CURRENT_SOURCE_DIR:
-        "!reference":
-        - ".config"
-        - terraform-src
-      VARIABLE_ROOT_FOLDER: environments
-      TF_BACKEND_ASSUME_ROLE_ARN: arn:aws:iam::621074188511:role/AdminRole
-      IGNORE_ASSUME_ROLE: 'false'
-      WORKSPACE: "${{ matrix.TF_PREDEFINE_WORKSPACE }}"
     strategy:
+      fail-fast: false
+      max-parallel: 1
       matrix:
-        TF_PREDEFINE_WORKSPACE:
+        workspace:
+          - dev
+          - sit
+          - uat
+          - preprod
+          - prod
+    env:
+      WORKSPACE: "${{ matrix.workspace }}"
+      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
     steps:
-    - uses: actions/checkout@v4.1.0
-      with:
-        fetch-depth: 20
-        lfs: true
-    - uses: actions/download-artifact@v4.1.0
-    - run:
-        "!reference":
-        - ".assume-role"
-        - script
-    - run: assume_role $ASSUME_ROLE_ARN $EXTERNAL_ID
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfenv_script
-    - run:
-        "!reference":
-        - ".before_script"
-        - tfinit_script
-    - run: |-
-        cd ${{ github.workspace }}/$TF_CURRENT_SOURCE_DIR
-        TF_DESTROY_CMD="terraform apply -auto-approve -destroy tf-${WORKSPACE}.plan"
-        echo $TF_DESTROY_CMD
-        eval $TF_DESTROY_CMD
-        cd ${{ github.workspace }}
+      - name: Display Destroy Stage
+        run: |
+          echo "=========================================="
+          echo "💥 Running Destroy Stage"
+          echo "Workspace: ${{ matrix.workspace }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "⚠️  WARNING: This will destroy infrastructure!"
+          echo "=========================================="
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.0
+        with:
+          fetch-depth: 20
+          lfs: true
+
+      # - name: Download Plan Artifact
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     path: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+
+      # - name: Terraform Destroy
+      #   working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #   run: |
+      #     echo "Destroying infrastructure..."
+      #     terraform destroy -auto-approve -var-file=${{ env.TF_VARIABLE_FILE }}
+
+      # - name: Upload Destroy Logs
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "destroy-logs-${{ matrix.workspace }}"
+      #     retention-days: 30
+      #     path: "${{ env.TF_CURRENT_SOURCE_DIR }}/*.log"

@@ -1,0 +1,36 @@
+name: 'Terraform Environment Setup'
+description: 'Sets up Terraform version using tfenv or specified version'
+inputs:
+  terraform-version:
+    description: 'Terraform version to install (optional, reads from .terraform-version if not provided)'
+    required: false
+    default: ''
+  tf-current-source-dir:
+    description: 'Terraform source directory'
+    required: false
+    default: '.'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Terraform version
+      shell: bash
+      run: |
+        echo "=========================================="
+        echo "Setting up Terraform Environment"
+        echo "Source Directory: ${{ inputs.tf-current-source-dir }}"
+        echo "=========================================="
+
+        # Placeholder for tfenv setup
+        # This would typically:
+        # 1. Check for .terraform-version file
+        # 2. Install the specified Terraform version
+        # 3. Set it as the active version
+
+        if [ -f ".terraform-version" ]; then
+          echo "Found .terraform-version file"
+          cat .terraform-version
+        fi
+
+        if [ -n "${{ inputs.terraform-version }}" ]; then
+          echo "Using specified Terraform version: ${{ inputs.terraform-version }}"
+        fi

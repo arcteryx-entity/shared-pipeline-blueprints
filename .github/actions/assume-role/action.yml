@@ -1,0 +1,34 @@
+name: 'Assume AWS IAM Role'
+description: 'Assumes an AWS IAM role for Terraform operations'
+inputs:
+  role-arn:
+    description: 'AWS IAM Role ARN to assume'
+    required: true
+  external-id:
+    description: 'External ID for role assumption'
+    required: false
+    default: ''
+  ignore-assume-role:
+    description: 'Skip role assumption if set to true'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure AWS credentials
+      if: inputs.ignore-assume-role != 'true'
+      shell: bash
+      run: |
+        echo "=========================================="
+        echo "Assuming AWS IAM Role"
+        echo "Role ARN: ${{ inputs.role-arn }}"
+        echo "=========================================="
+        # Placeholder for actual assume_role implementation
+        # This would typically use aws-actions/configure-aws-credentials
+        # or a custom script to assume the role
+
+    - name: Skip role assumption
+      if: inputs.ignore-assume-role == 'true'
+      shell: bash
+      run: |
+        echo "Skipping AWS role assumption (IGNORE_ASSUME_ROLE is set to 'true')"

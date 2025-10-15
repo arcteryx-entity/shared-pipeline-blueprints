@@ -1,0 +1,42 @@
+name: 'Terraform Init'
+description: 'Initializes Terraform with backend configuration'
+inputs:
+  tf-current-source-dir:
+    description: 'Terraform source directory'
+    required: true
+  tf-variable-file:
+    description: 'Path to Terraform variable file'
+    required: false
+    default: ''
+  workspace:
+    description: 'Terraform workspace name'
+    required: true
+  backend-assume-role-arn:
+    description: 'Backend IAM Role ARN for remote state access'
+    required: false
+    default: ''
+runs:
+  using: 'composite'
+  steps:
+    - name: Terraform Init
+      shell: bash
+      working-directory: ${{ inputs.tf-current-source-dir }}
+      run: |
+        echo "=========================================="
+        echo "Initializing Terraform"
+        echo "Workspace: ${{ inputs.workspace }}"
+        echo "Source Directory: ${{ inputs.tf-current-source-dir }}"
+        echo "=========================================="
+
+        # Placeholder for terraform init
+        # TF_INIT_CMD="terraform init -backend-config=..."
+        # echo $TF_INIT_CMD
+        # eval $TF_INIT_CMD
+
+    - name: Select or Create Workspace
+      shell: bash
+      working-directory: ${{ inputs.tf-current-source-dir }}
+      run: |
+        echo "Selecting workspace: ${{ inputs.workspace }}"
+        # Placeholder for workspace selection
+        # terraform workspace select ${{ inputs.workspace }} || terraform workspace new ${{ inputs.workspace }}
