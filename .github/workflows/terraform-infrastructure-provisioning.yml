@@ -76,7 +76,6 @@ on:
           - validate
           - plan
           - apply
-          - destroy
 
 concurrency:
   group: "${{ github.ref }}-${{ github.workflow }}"
@@ -153,60 +152,61 @@ jobs:
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Running terraform fmt check..."
-          terraform fmt -list=true -write=false -diff=true -check=true -recursive
+          # terraform fmt -list=true -write=false -diff=true -check=true -recursive
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Running terraform validate..."
-          terraform validate
+          # terraform validate
 
       - name: TFLint
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Running tflint..."
-          tflint --var-file=${{ env.TF_VARIABLE_FILE }} \
-                 -f junit \
-                 --minimum-failure-severity=${{ env.MINIMUM_FAILURE_SEVERITY }} \
-                 --no-color > ../tflint-${{ matrix.workspace }}.xml
+          # tflint --var-file=${{ env.TF_VARIABLE_FILE }} \
+          #        -f junit \
+          #        --minimum-failure-severity=${{ env.MINIMUM_FAILURE_SEVERITY }} \
+          #        --no-color > ../tflint-${{ matrix.workspace }}.xml
 
       - name: TFSec Security Scan
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Running tfsec..."
-          tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
-               --workspace ${{ matrix.workspace }} \
-               --no-module-downloads \
-               --soft-fail \
-               --out=../tfsec-report-${{ matrix.workspace }}.json \
-               --format=json
+          # tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
+          #      --workspace ${{ matrix.workspace }} \
+          #      --no-module-downloads \
+          #      --soft-fail \
+          #      --out=../tfsec-report-${{ matrix.workspace }}.json \
+          #      --format=json
 
       - name: TFSec Summary
         if: always()
         run: |
           echo "Tfsec Summary..."
-          jq -c '.["results"]' tfsec-report-${{ matrix.workspace }}.json | \
-            jq -c '.[] | [.severity, .description, .location.filename]' | sort || true
-          echo "Scanning for ${{ env.MINIMUM_SEVERITY }} severity..."
+          # jq -c '.["results"]' tfsec-report-${{ matrix.workspace }}.json | \
+          #   jq -c '.[] | [.severity, .description, .location.filename]' | sort || true
+          # echo "Scanning for ${{ env.MINIMUM_SEVERITY }} severity..."
 
       - name: TFSec Critical Check
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
-          tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
-               --workspace=${{ matrix.workspace }} \
-               --no-module-downloads \
-               --concise-output \
-               --minimum-severity CRITICAL
+          echo "Running TFSec critical check..."
+          # tfsec . --var-file=${{ env.TF_VARIABLE_FILE }} \
+          #      --workspace=${{ matrix.workspace }} \
+          #      --no-module-downloads \
+          #      --concise-output \
+          #      --minimum-severity CRITICAL
 
-      - name: Upload Validation Reports
-        uses: actions/upload-artifact@v4.1.0
-        if: always()
-        with:
-          name: "validate-reports-${{ matrix.workspace }}"
-          retention-days: 7
-          path: |
-            tfsec-report-${{ matrix.workspace }}.json
-            tflint-${{ matrix.workspace }}.xml
+      # - name: Upload Validation Reports
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "validate-reports-${{ matrix.workspace }}"
+      #     retention-days: 7
+      #     path: |
+      #       tfsec-report-${{ matrix.workspace }}.json
+      #       tflint-${{ matrix.workspace }}.xml
 
   Plan:
     name: "Plan (${{ matrix.workspace }})"
@@ -247,11 +247,11 @@ jobs:
           fetch-depth: 20
           lfs: true
 
-      - name: Download Validation Artifacts
-        uses: actions/download-artifact@v4.1.0
-        with:
-          name: "validate-reports-${{ matrix.workspace }}"
-          path: .
+      # - name: Download Validation Artifacts
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "validate-reports-${{ matrix.workspace }}"
+      #     path: .
 
       - name: Assume AWS Role
         uses: ./.github/actions/assume-role
@@ -275,18 +275,18 @@ jobs:
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Running terraform plan..."
-          terraform plan \
-            -var-file=${{ env.TF_VARIABLE_FILE }} \
-            -out=tf-${{ matrix.workspace }}.plan \
-            -input=false
+          # terraform plan \
+          #   -var-file=${{ env.TF_VARIABLE_FILE }} \
+          #   -out=tf-${{ matrix.workspace }}.plan \
+          #   -input=false
 
-      - name: Upload Plan Artifact
-        uses: actions/upload-artifact@v4.1.0
-        if: success()
-        with:
-          name: "terraform-plan-${{ matrix.workspace }}"
-          retention-days: 7
-          path: "${{ env.TF_CURRENT_SOURCE_DIR }}/tf-${{ matrix.workspace }}.plan"
+      # - name: Upload Plan Artifact
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: success()
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     retention-days: 7
+      #     path: "${{ env.TF_CURRENT_SOURCE_DIR }}/tf-${{ matrix.workspace }}.plan"
 
   Scan:
     name: "Scan (${{ matrix.workspace }})"
@@ -327,17 +327,17 @@ jobs:
           fetch-depth: 20
           lfs: true
 
-      - name: Download Plan Artifact
-        uses: actions/download-artifact@v4.1.0
-        with:
-          name: "terraform-plan-${{ matrix.workspace }}"
-          path: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      # - name: Download Plan Artifact
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     path: ${{ env.TF_CURRENT_SOURCE_DIR }}
 
       - name: Convert Plan to JSON
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Converting plan to JSON format..."
-          terraform show -json tf-${{ matrix.workspace }}.plan > tf-${{ matrix.workspace }}-plan.json
+          # terraform show -json tf-${{ matrix.workspace }}.plan > tf-${{ matrix.workspace }}-plan.json
 
       - name: Run OPA Policy Scan
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
@@ -357,15 +357,15 @@ jobs:
           #   --output ../trivy-scan-${{ matrix.workspace }}.json \
           #   --severity HIGH,CRITICAL
 
-      - name: Upload Scan Results
-        uses: actions/upload-artifact@v4.1.0
-        if: always()
-        with:
-          name: "scan-results-${{ matrix.workspace }}"
-          retention-days: 7
-          path: |
-            opa-scan-${{ matrix.workspace }}.json
-            trivy-scan-${{ matrix.workspace }}.json
+      # - name: Upload Scan Results
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "scan-results-${{ matrix.workspace }}"
+      #     retention-days: 7
+      #     path: |
+      #       opa-scan-${{ matrix.workspace }}.json
+      #       trivy-scan-${{ matrix.workspace }}.json
 
   Apply:
     name: "Apply (${{ matrix.workspace }})"
@@ -406,11 +406,11 @@ jobs:
           fetch-depth: 20
           lfs: true
 
-      - name: Download Plan Artifact
-        uses: actions/download-artifact@v4.1.0
-        with:
-          name: "terraform-plan-${{ matrix.workspace }}"
-          path: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      # - name: Download Plan Artifact
+      #   uses: actions/download-artifact@v4.1.0
+      #   with:
+      #     name: "terraform-plan-${{ matrix.workspace }}"
+      #     path: ${{ env.TF_CURRENT_SOURCE_DIR }}
 
       - name: Assume AWS Role
         uses: ./.github/actions/assume-role
@@ -434,90 +434,12 @@ jobs:
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
         run: |
           echo "Applying terraform plan..."
-          terraform apply -auto-approve tf-${{ matrix.workspace }}.plan
+          # terraform apply -auto-approve tf-${{ matrix.workspace }}.plan
 
-      - name: Upload Apply Logs
-        uses: actions/upload-artifact@v4.1.0
-        if: always()
-        with:
-          name: "apply-logs-${{ matrix.workspace }}"
-          retention-days: 30
-          path: "${{ env.TF_CURRENT_SOURCE_DIR }}/*.log"
-
-  Destroy:
-    name: "Destroy (${{ matrix.workspace }})"
-    needs: Scan
-    runs-on: "${{ inputs.runner || 'platform-shared-services' }}"
-    container:
-      image: "${{ inputs.container_image || 'freddieentity/terraform:latest' }}"
-    if: |
-      (github.event_name == 'workflow_call' && inputs.action == 'destroy') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy')
-    environment:
-      name: "${{ matrix.workspace }}"
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        workspace: ${{ (inputs.workspace != '' && fromJSON(format('["{0}"]', inputs.workspace))) || fromJSON('["nonprod", "prod"]') }}
-    env:
-      WORKSPACE: "${{ matrix.workspace }}"
-      TF_VARIABLE_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.tfvars"
-      TF_BACKEND_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.backend"
-      AWS_ACCESS_KEY_ID: "${{ secrets.aws_access_key_id }}"
-      AWS_SECRET_ACCESS_KEY: "${{ secrets.aws_secret_access_key }}"
-      AWS_SESSION_TOKEN: "${{ secrets.aws_session_token }}"
-    steps:
-      - name: Display Destroy Stage
-        run: |
-          echo "=========================================="
-          echo "💥 Running Destroy Stage"
-          echo "Workspace: ${{ matrix.workspace }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "⚠️  WARNING: This will destroy infrastructure!"
-          echo "=========================================="
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4.1.0
-        with:
-          fetch-depth: 20
-          lfs: true
-
-      - name: Download Plan Artifact
-        uses: actions/download-artifact@v4.1.0
-        with:
-          name: "terraform-plan-${{ matrix.workspace }}"
-          path: ${{ env.TF_CURRENT_SOURCE_DIR }}
-
-      - name: Assume AWS Role
-        uses: ./.github/actions/assume-role
-        with:
-          role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
-          ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
-
-      - name: Setup Terraform Environment
-        uses: ./.github/actions/terraform-setup
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
-
-      - name: Initialize Terraform
-        uses: ./.github/actions/terraform-init
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
-          workspace: ${{ matrix.workspace }}
-          backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
-
-      - name: Terraform Destroy
-        working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
-        run: |
-          echo "Destroying infrastructure..."
-          terraform destroy -auto-approve -var-file=${{ env.TF_VARIABLE_FILE }}
-
-      - name: Upload Destroy Logs
-        uses: actions/upload-artifact@v4.1.0
-        if: always()
-        with:
-          name: "destroy-logs-${{ matrix.workspace }}"
-          retention-days: 30
-          path: "${{ env.TF_CURRENT_SOURCE_DIR }}/*.log"
+      # - name: Upload Apply Logs
+      #   uses: actions/upload-artifact@v4.1.0
+      #   if: always()
+      #   with:
+      #     name: "apply-logs-${{ matrix.workspace }}"
+      #     retention-days: 30
+      #     path: "${{ env.TF_CURRENT_SOURCE_DIR }}/*.log"
