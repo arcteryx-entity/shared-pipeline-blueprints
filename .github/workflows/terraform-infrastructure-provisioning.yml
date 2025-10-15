@@ -1,14 +1,58 @@
 name: Terraform Infrastructure Provisioning
 
 on:
-  push:
-    branches:
-      - main
-      - 'feature/**'
-      - 'renovate/**'
-  pull_request:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      workspace:
+        description: 'Terraform workspace to deploy (leave empty for all)'
+        required: false
+        type: string
+        default: ''
+      action:
+        description: 'Action to perform'
+        required: false
+        type: string
+        default: 'plan'
+      tf_current_source_dir:
+        description: 'Terraform source directory'
+        required: false
+        type: string
+        default: '.'
+      variable_root_folder:
+        description: 'Root folder containing environment configurations'
+        required: false
+        type: string
+        default: 'environments'
+      tf_backend_assume_role_arn:
+        description: 'AWS IAM Role ARN for backend access'
+        required: false
+        type: string
+        default: ''
+      ignore_assume_role:
+        description: 'Skip AWS role assumption'
+        required: false
+        type: string
+        default: 'false'
+      runner:
+        description: 'GitHub runner to use'
+        required: false
+        type: string
+        default: 'platform-shared-services'
+      container_image:
+        description: 'Container image to use'
+        required: false
+        type: string
+        default: 'freddieentity/terraform:latest'
+    secrets:
+      aws_access_key_id:
+        description: 'AWS Access Key ID'
+        required: false
+      aws_secret_access_key:
+        description: 'AWS Secret Access Key'
+        required: false
+      aws_session_token:
+        description: 'AWS Session Token'
+        required: false
   workflow_dispatch:
     inputs:
       workspace:
@@ -17,6 +61,7 @@ on:
         type: choice
         options:
           - ''
+          - nonprod
           - dev
           - sit
           - uat
@@ -42,20 +87,19 @@ env:
   BLUEPRINT_DEFAULT_BRANCH: main
   MINIMUM_SEVERITY: MEDIUM
   MINIMUM_FAILURE_SEVERITY: warning
-  TF_CURRENT_SOURCE_DIR: "terraform"
-  VARIABLE_ROOT_FOLDER: environments
-  TF_BACKEND_ASSUME_ROLE_ARN: arn:aws:iam::621074188511:role/AdminRole
-  IGNORE_ASSUME_ROLE: 'false'
+  TF_CURRENT_SOURCE_DIR: "${{ inputs.tf_current_source_dir || '.' }}"
+  VARIABLE_ROOT_FOLDER: "${{ inputs.variable_root_folder || 'environments' }}"
+  TF_BACKEND_ASSUME_ROLE_ARN: "${{ inputs.tf_backend_assume_role_arn || 'arn:aws:iam::621074188511:role/AdminRole' }}"
+  IGNORE_ASSUME_ROLE: "${{ inputs.ignore_assume_role || 'false' }}"
 
 jobs:
   Validate:
     name: "Validate (${{ matrix.workspace }})"
-    runs-on: platform-shared-services
+    runs-on: "${{ inputs.runner || 'platform-shared-services' }}"
     container:
-      image: freddieentity/terraform:latest
+      image: "${{ inputs.container_image || 'freddieentity/terraform:latest' }}"
     if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_call') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'validate' || github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'))
     environment:
       name: "${{ matrix.workspace }}"
@@ -64,15 +108,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace:
-          - dev
-          - sit
-          - uat
-          - preprod
-          - prod
+        workspace: ${{ (inputs.workspace != '' && fromJSON(format('["{0}"]', inputs.workspace))) || fromJSON('["nonprod", "prod"]') }}
     env:
       WORKSPACE: "${{ matrix.workspace }}"
-      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
+      TF_VARIABLE_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.tfvars"
+      TF_BACKEND_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.backend"
+      AWS_ACCESS_KEY_ID: "${{ secrets.aws_access_key_id }}"
+      AWS_SECRET_ACCESS_KEY: "${{ secrets.aws_secret_access_key }}"
+      AWS_SESSION_TOKEN: "${{ secrets.aws_session_token }}"
     steps:
       - name: Display Validate Stage
         run: |
@@ -168,12 +211,11 @@ jobs:
   Plan:
     name: "Plan (${{ matrix.workspace }})"
     needs: Validate
-    runs-on: platform-shared-services
+    runs-on: "${{ inputs.runner || 'platform-shared-services' }}"
     container:
-      image: freddieentity/terraform:latest
+      image: "${{ inputs.container_image || 'freddieentity/terraform:latest' }}"
     if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_call') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'))
     environment:
       name: "${{ matrix.workspace }}"
@@ -182,15 +224,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace:
-          - dev
-          - sit
-          - uat
-          - preprod
-          - prod
+        workspace: ${{ (inputs.workspace != '' && fromJSON(format('["{0}"]', inputs.workspace))) || fromJSON('["nonprod", "prod"]') }}
     env:
       WORKSPACE: "${{ matrix.workspace }}"
-      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
+      TF_VARIABLE_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.tfvars"
+      TF_BACKEND_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.backend"
+      AWS_ACCESS_KEY_ID: "${{ secrets.aws_access_key_id }}"
+      AWS_SECRET_ACCESS_KEY: "${{ secrets.aws_secret_access_key }}"
+      AWS_SESSION_TOKEN: "${{ secrets.aws_session_token }}"
     steps:
       - name: Display Plan Stage
         run: |
@@ -250,12 +291,11 @@ jobs:
   Scan:
     name: "Scan (${{ matrix.workspace }})"
     needs: Plan
-    runs-on: platform-shared-services
+    runs-on: "${{ inputs.runner || 'platform-shared-services' }}"
     container:
-      image: freddieentity/terraform:latest
+      image: "${{ inputs.container_image || 'freddieentity/terraform:latest' }}"
     if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_call') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'))
     environment:
       name: "${{ matrix.workspace }}"
@@ -264,15 +304,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace:
-          - dev
-          - sit
-          - uat
-          - preprod
-          - prod
+        workspace: ${{ (inputs.workspace != '' && fromJSON(format('["{0}"]', inputs.workspace))) || fromJSON('["nonprod", "prod"]') }}
     env:
       WORKSPACE: "${{ matrix.workspace }}"
-      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
+      TF_VARIABLE_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.tfvars"
+      TF_BACKEND_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.backend"
+      AWS_ACCESS_KEY_ID: "${{ secrets.aws_access_key_id }}"
+      AWS_SECRET_ACCESS_KEY: "${{ secrets.aws_secret_access_key }}"
+      AWS_SESSION_TOKEN: "${{ secrets.aws_session_token }}"
     steps:
       - name: Display Scan Stage
         run: |
@@ -331,12 +370,12 @@ jobs:
   Apply:
     name: "Apply (${{ matrix.workspace }})"
     needs: Scan
-    runs-on: platform-shared-services
+    runs-on: "${{ inputs.runner || 'platform-shared-services' }}"
     container:
-      image: freddieentity/terraform:latest
+      image: "${{ inputs.container_image || 'freddieentity/terraform:latest' }}"
     if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_call' && inputs.action == 'apply') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
     environment:
       name: "${{ matrix.workspace }}"
     timeout-minutes: 60
@@ -344,15 +383,14 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        workspace:
-          - dev
-          - sit
-          - uat
-          - preprod
-          - prod
+        workspace: ${{ (inputs.workspace != '' && fromJSON(format('["{0}"]', inputs.workspace))) || fromJSON('["nonprod", "prod"]') }}
     env:
       WORKSPACE: "${{ matrix.workspace }}"
-      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
+      TF_VARIABLE_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.tfvars"
+      TF_BACKEND_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.backend"
+      AWS_ACCESS_KEY_ID: "${{ secrets.aws_access_key_id }}"
+      AWS_SECRET_ACCESS_KEY: "${{ secrets.aws_secret_access_key }}"
+      AWS_SESSION_TOKEN: "${{ secrets.aws_session_token }}"
     steps:
       - name: Display Apply Stage
         run: |
@@ -409,10 +447,12 @@ jobs:
   Destroy:
     name: "Destroy (${{ matrix.workspace }})"
     needs: Scan
-    runs-on: platform-shared-services
+    runs-on: "${{ inputs.runner || 'platform-shared-services' }}"
     container:
-      image: freddieentity/terraform:latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+      image: "${{ inputs.container_image || 'freddieentity/terraform:latest' }}"
+    if: |
+      (github.event_name == 'workflow_call' && inputs.action == 'destroy') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy')
     environment:
       name: "${{ matrix.workspace }}"
     timeout-minutes: 60
@@ -420,15 +460,14 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        workspace:
-          - dev
-          - sit
-          - uat
-          - preprod
-          - prod
+        workspace: ${{ (inputs.workspace != '' && fromJSON(format('["{0}"]', inputs.workspace))) || fromJSON('["nonprod", "prod"]') }}
     env:
       WORKSPACE: "${{ matrix.workspace }}"
-      TF_VARIABLE_FILE: "${{ env.VARIABLE_ROOT_FOLDER }}/${{ matrix.workspace }}.tfvars"
+      TF_VARIABLE_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.tfvars"
+      TF_BACKEND_FILE: "${{ inputs.variable_root_folder || 'environments' }}/${{ matrix.workspace }}/terraform.backend"
+      AWS_ACCESS_KEY_ID: "${{ secrets.aws_access_key_id }}"
+      AWS_SECRET_ACCESS_KEY: "${{ secrets.aws_secret_access_key }}"
+      AWS_SESSION_TOKEN: "${{ secrets.aws_session_token }}"
     steps:
       - name: Display Destroy Stage
         run: |

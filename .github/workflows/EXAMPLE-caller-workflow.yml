@@ -1,0 +1,68 @@
+# Example: How to call the reusable Terraform Infrastructure Provisioning workflow
+# from your Terraform repository
+
+name: Terraform Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: 'Terraform workspace to deploy (leave empty for all)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - nonprod
+          - prod
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        default: 'plan'
+        options:
+          - validate
+          - plan
+          - apply
+          - destroy
+
+jobs:
+  terraform:
+    name: Terraform Pipeline
+    uses: datumhq-consulting-vn/bdo/shared-pipeline-blueprints/.github/workflows/terraform-infrastructure-provisioning.yml@main
+    with:
+      # Required: Specify the workspace (nonprod or prod, or leave empty for all)
+      workspace: ${{ github.event.inputs.workspace || '' }}
+
+      # Required: Specify the action to perform
+      action: ${{ github.event.inputs.action || 'plan' }}
+
+      # Optional: Terraform source directory (default: '.')
+      tf_current_source_dir: '.'
+
+      # Optional: Root folder for environment configs (default: 'environments')
+      variable_root_folder: 'environments'
+
+      # Optional: AWS IAM Role ARN for backend access
+      # tf_backend_assume_role_arn: 'arn:aws:iam::123456789012:role/TerraformRole'
+
+      # Optional: Skip AWS role assumption (default: 'false')
+      # ignore_assume_role: 'false'
+
+      # Optional: GitHub runner to use (default: 'platform-shared-services')
+      # runner: 'ubuntu-latest'
+
+      # Optional: Container image to use (default: 'freddieentity/terraform:latest')
+      # container_image: 'hashicorp/terraform:latest'
+
+    secrets:
+      # Optional: AWS credentials (if not using role assumption)
+      # aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      # aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      # aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
