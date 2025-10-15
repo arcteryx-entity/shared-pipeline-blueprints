@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/nguyentrungtin/Documents/Datum/datumhq-consulting-vn/bdo/platform-aws-infrastructure/.github/workflows/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
