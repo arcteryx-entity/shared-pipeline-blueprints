@@ -130,23 +130,23 @@ jobs:
           fetch-depth: 20
           lfs: true
 
-      - name: Assume AWS Role
-        uses: ./.github/actions/assume-role
-        with:
-          role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
-          ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
 
-      - name: Setup Terraform Environment
-        uses: ./.github/actions/terraform-setup
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
 
-      - name: Initialize Terraform
-        uses: ./.github/actions/terraform-init
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
-          workspace: ${{ matrix.workspace }}
-          backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
 
       - name: Terraform Format Check
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
@@ -250,23 +250,23 @@ jobs:
       #     name: "validate-reports-${{ matrix.workspace }}"
       #     path: .
 
-      - name: Assume AWS Role
-        uses: ./.github/actions/assume-role
-        with:
-          role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
-          ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
 
-      - name: Setup Terraform Environment
-        uses: ./.github/actions/terraform-setup
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
 
-      - name: Initialize Terraform
-        uses: ./.github/actions/terraform-init
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
-          workspace: ${{ matrix.workspace }}
-          backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
 
       - name: Terraform Plan
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
@@ -409,23 +409,23 @@ jobs:
       #     name: "terraform-plan-${{ matrix.workspace }}"
       #     path: ${{ env.TF_CURRENT_SOURCE_DIR }}
 
-      - name: Assume AWS Role
-        uses: ./.github/actions/assume-role
-        with:
-          role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
-          ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
+      # - name: Assume AWS Role
+      #   uses: ./.github/actions/assume-role
+      #   with:
+      #     role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      #     ignore-assume-role: ${{ env.IGNORE_ASSUME_ROLE }}
 
-      - name: Setup Terraform Environment
-        uses: ./.github/actions/terraform-setup
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      # - name: Setup Terraform Environment
+      #   uses: ./.github/actions/terraform-setup
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
 
-      - name: Initialize Terraform
-        uses: ./.github/actions/terraform-init
-        with:
-          tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
-          workspace: ${{ matrix.workspace }}
-          backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
+      # - name: Initialize Terraform
+      #   uses: ./.github/actions/terraform-init
+      #   with:
+      #     tf-current-source-dir: ${{ env.TF_CURRENT_SOURCE_DIR }}
+      #     workspace: ${{ matrix.workspace }}
+      #     backend-assume-role-arn: ${{ env.TF_BACKEND_ASSUME_ROLE_ARN }}
 
       - name: Terraform Apply
         working-directory: ${{ env.TF_CURRENT_SOURCE_DIR }}
