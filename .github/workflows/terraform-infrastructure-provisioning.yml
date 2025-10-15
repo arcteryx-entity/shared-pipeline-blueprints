@@ -1,6 +1,10 @@
 name: Terraform Infrastructure Provisioning
 on:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      foo:
+        required: true
+        type: string
 
 jobs:
   Init:
